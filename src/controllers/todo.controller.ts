@@ -21,6 +21,7 @@ import {
   post,
   requestBody,
 } from '@loopback/rest';
+import {TenantConfigRepository} from '@sourceloop/authentication-service';
 import {
   CONTENT_TYPE,
   OPERATION_SECURITY_SPEC,
@@ -45,6 +46,8 @@ export class TodoController {
     public toDoRepository: ToDoRepository,
     @repository(UserLevelResourceRepository)
     public userLevelResourceRepo: UserLevelResourceRepository,
+    @repository(TenantConfigRepository)
+    public tenantConfigRepository: TenantConfigRepository,
   ) {}
 
   @authenticate(STRATEGY.BEARER, {

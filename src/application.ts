@@ -16,6 +16,12 @@ import {
   AuthenticationServiceComponent,
   AuthorizationBindings,
 } from '@sourceloop/authentication-service';
+import {
+  CachePluginComponent,
+  CachePluginComponentBindings,
+  CachePluginComponentOptions,
+  CacheStrategyTypes,
+} from '@sourceloop/cache';
 import {SecureSequence} from '@sourceloop/core';
 import {
   CasbinAuthorizationProvider,
@@ -23,10 +29,12 @@ import {
 } from 'loopback4-authorization';
 import {RateLimitSecurityBindings} from 'loopback4-ratelimiter';
 import path from 'path';
+import {RatelimitDataSource} from './datasources';
 import {
   CasbinEnforcerConfigProvider,
   CasbinResValModifierProvider,
 } from './providers';
+import {getRatelimitForTenant, getTenantId, hasToken} from './utils';
 
 export {ApplicationConfig};
 
@@ -39,18 +47,30 @@ export class AuthMultitenantExampleApplication extends BootMixin(
     // Set up default home page
     this.static('/', path.join(__dirname, '../public'));
 
+    const cacheOptions: CachePluginComponentOptions = {
+      cacheProvider: CacheStrategyTypes.Redis,
+      prefix: 'sourceloop',
+      ttl: 24 * 60 * 60 * 100,
+    };
+
+    this.configure(CachePluginComponentBindings.COMPONENT).to(cacheOptions);
+    this.component(CachePluginComponent);
+
     this.bind(RateLimitSecurityBindings.CONFIG).to({
-      name: 'ratelimit',
+      name: RatelimitDataSource.dataSourceName,
       type: 'RedisStore',
-      max: parseInt(process.env.RATE_LIMITER_MAX_REQS as string),
+      max: async (req: Request) => {
+        return (
+          (await getRatelimitForTenant(req, this)) ??
+          parseInt(process.env.RATE_LIMITER_MAX_REQS as string)
+        );
+      },
       windowMs: parseInt(process.env.RATE_LIMITER_WINDOW_MS as string),
-      keyGenerator: function (req: Request) {
-        const token = req.headers.authorization?.replace('Bearer ', '');
-        if (!token) {
+      keyGenerator: (req: Request) => {
+        if (!hasToken(req)) {
           return req.ip;
         }
-        const userData = JSON.parse(atob(token?.split('.')[1] ?? ''));
-        return userData.tenantId;
+        return getTenantId(req);
       },
       enabledByDefault: true,
     });
