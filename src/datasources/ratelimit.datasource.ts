@@ -4,7 +4,6 @@
 // https://opensource.org/licenses/MIT
 import {inject, lifeCycleObserver, LifeCycleObserver} from '@loopback/core';
 import {juggler} from '@loopback/repository';
-import {AuthCacheSourceName} from '@sourceloop/authentication-service';
 
 const config = {
   name: 'ratelimit',
@@ -12,7 +11,7 @@ const config = {
   host: 'localhost',
   port: 7001,
   password: 'secret',
-  db: '1',
+  db: '2',
 };
 
 // Observe application's life cycle to disconnect the datasource when
@@ -24,7 +23,7 @@ export class RatelimitDataSource
   extends juggler.DataSource
   implements LifeCycleObserver
 {
-  static dataSourceName = AuthCacheSourceName;
+  static dataSourceName = 'ratelimit';
   static readonly defaultConfig = config;
 
   constructor(

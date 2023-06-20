@@ -19,9 +19,7 @@ import {
   param,
   patch,
   post,
-  Request,
   requestBody,
-  Response,
 } from '@loopback/rest';
 import {
   CONTENT_TYPE,
@@ -34,7 +32,6 @@ import {
   STRATEGY,
 } from 'loopback4-authentication';
 import {authorize, IAuthUserWithPermissions} from 'loopback4-authorization';
-import {ratelimit} from 'loopback4-ratelimiter';
 import {PermissionKey} from '../enums';
 import {ToDo, UserLevelResource} from '../models';
 import {ToDoRepository, UserLevelResourceRepository} from '../repositories';
@@ -78,7 +75,6 @@ export class TodoController {
     })
     toDo: Omit<ToDo, 'id'>,
   ): Promise<ToDo> {
-    console.log(currentUser);
     const todoCreated = await this.toDoRepository.create({
       ...toDo,
       tenantId: currentUser.tenantId,
@@ -93,13 +89,6 @@ export class TodoController {
     return todoCreated;
   }
 
-  @ratelimit(true, {
-    max: 2,
-    keyGenerator: (req: Request, res: Response) => {
-      console.log(req);
-      return req.ip;
-    },
-  })
   @authenticate(STRATEGY.BEARER, {
     passReqToCallback: true,
   })

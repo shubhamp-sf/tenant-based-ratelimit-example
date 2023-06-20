@@ -12,13 +12,21 @@ import {
 } from '@loopback/rest-explorer';
 import {ServiceMixin} from '@loopback/service-proxy';
 
-import {AuthenticationServiceComponent} from '@sourceloop/authentication-service';
 import {
-  RateLimitSecurityBindings,
-  RateLimiterComponent,
-} from 'loopback4-ratelimiter';
+  AuthenticationServiceComponent,
+  AuthorizationBindings,
+} from '@sourceloop/authentication-service';
+import {SecureSequence} from '@sourceloop/core';
+import {
+  CasbinAuthorizationProvider,
+  UserPermissionsProvider,
+} from 'loopback4-authorization';
+import {RateLimitSecurityBindings} from 'loopback4-ratelimiter';
 import path from 'path';
-import {MySequence} from './sequence';
+import {
+  CasbinEnforcerConfigProvider,
+  CasbinResValModifierProvider,
+} from './providers';
 
 export {ApplicationConfig};
 
@@ -31,48 +39,44 @@ export class AuthMultitenantExampleApplication extends BootMixin(
     // Set up default home page
     this.static('/', path.join(__dirname, '../public'));
 
-    this.configure(RestExplorerBindings.COMPONENT).to({
-      path: '/explorer',
-    });
-
-    this.component(RestExplorerComponent);
-
-    console.log(process.env.RATE_LIMITER_WINDOW_MS);
-    console.log(process.env.RATE_LIMITER_MAX_REQS);
-
-    // this.bind(RateLimitSecurityBindings.RATELIMITCONFIG).to({
-    //   RatelimitActionMiddleware: true,
-    // });
-
-    this.component(RateLimiterComponent);
     this.bind(RateLimitSecurityBindings.CONFIG).to({
       name: 'ratelimit',
       type: 'RedisStore',
       max: parseInt(process.env.RATE_LIMITER_MAX_REQS as string),
       windowMs: parseInt(process.env.RATE_LIMITER_WINDOW_MS as string),
       keyGenerator: function (req: Request) {
-        console.log(req.ip);
-        return req.ip;
+        const token = req.headers.authorization?.replace('Bearer ', '');
+        if (!token) {
+          return req.ip;
+        }
+        const userData = JSON.parse(atob(token?.split('.')[1] ?? ''));
+        return userData.tenantId;
       },
+      enabledByDefault: true,
     });
 
-    this.component(AuthenticationServiceComponent);
+    this.component(AuthenticationServiceComponent); // already binds core component which binds ratelimit component
+    this.sequence(SecureSequence);
 
-    this.sequence(MySequence);
+    this.bind(AuthorizationBindings.CASBIN_ENFORCER_CONFIG_GETTER).toProvider(
+      CasbinEnforcerConfigProvider,
+    );
 
-    // this.bind(AuthorizationBindings.CASBIN_ENFORCER_CONFIG_GETTER).toProvider(
-    //   CasbinEnforcerConfigProvider,
-    // );
+    this.bind(AuthorizationBindings.CASBIN_RESOURCE_MODIFIER_FN).toProvider(
+      CasbinResValModifierProvider,
+    );
+    this.bind(AuthorizationBindings.CASBIN_AUTHORIZE_ACTION).toProvider(
+      CasbinAuthorizationProvider,
+    );
+    this.bind(AuthorizationBindings.USER_PERMISSIONS).toProvider(
+      UserPermissionsProvider,
+    );
 
-    // this.bind(AuthorizationBindings.CASBIN_RESOURCE_MODIFIER_FN).toProvider(
-    //   CasbinResValModifierProvider,
-    // );
-    // this.bind(AuthorizationBindings.CASBIN_AUTHORIZE_ACTION).toProvider(
-    //   CasbinAuthorizationProvider,
-    // );
-    // this.bind(AuthorizationBindings.USER_PERMISSIONS).toProvider(
-    //   UserPermissionsProvider,
-    // );
+    this.configure(RestExplorerBindings.COMPONENT).to({
+      path: '/explorer',
+    });
+
+    this.component(RestExplorerComponent);
 
     this.projectRoot = __dirname;
     // Customize @loopback/boot Booter Conventions here
